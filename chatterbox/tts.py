@@ -22,6 +22,26 @@ from .models.t3.modules.cond_enc import T3Cond
 
 REPO_ID = "ResembleAI/chatterbox"
 
+def _load_state_dict(model_path_no_ext: Path, map_location="cpu"):
+    """
+    Loads a state dict from .safetensors or .pt file.
+    Logs which file type is being used.
+    """
+    safetensors_path = model_path_no_ext.with_suffix(".safetensors")
+    pt_path = model_path_no_ext.with_suffix(".pt")
+
+    if _HAVE_SAFETENSORS and safetensors_path.exists():
+        print(f"➡️  Loading model from {safetensors_path.name} (safetensors)")
+        return load_safetensors(safetensors_path, device=map_location)
+    elif pt_path.exists():
+        print(f"➡️  Loading model from {pt_path.name} (PyTorch .pt)")
+        return torch.load(pt_path, map_location=map_location)
+    else:
+        raise FileNotFoundError(
+            f"Model file not found. Looked for {safetensors_path.name} and {pt_path.name} in {model_path_no_ext.parent}"
+        )
+
+
 
 def punc_norm(text: str) -> str:
     """
@@ -139,13 +159,12 @@ class ChatterboxTTS:
             warnings.simplefilter("ignore")
             
             ve = VoiceEncoder()
-            ve.load_state_dict(
-                torch.load(ckpt_dir / "ve.pt")
-            )
+            ve_state = _load_state_dict(ckpt_dir / "ve", map_location=device)
+            ve.load_state_dict(ve_state)
             ve.to(device).eval()
 
             # Load model state
-            t3_state = torch.load(ckpt_dir / "t3_cfg.pt")
+            t3_state = _load_state_dict(ckpt_dir / "t3_cfg", map_location=device)
             if "model" in t3_state.keys():
                 t3_state = t3_state["model"][0]
             
@@ -165,9 +184,8 @@ class ChatterboxTTS:
             t3.to(device).eval()
 
             s3gen = S3Gen()
-            s3gen.load_state_dict(
-                torch.load(ckpt_dir / "s3gen.pt")
-            )
+            s3gen_state = _load_state_dict(ckpt_dir / "s3gen", map_location=device)
+            s3gen.load_state_dict(s3gen_state)
             s3gen.to(device).eval()
 
             tokenizer = EnTokenizer(
